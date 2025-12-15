@@ -7,30 +7,32 @@ import java.util.List;
 public interface State {
 
 	boolean isSubStateOf(State state);
-	
 	boolean isSuperStateOf(State state);
 
 	public enum S implements State {
+		// Root States
+		CreateTemplate,
 
-		CREATE_TEMPLATE //
-
-		/* more states */
-		
-		;
+		// Concrete States
+		NoImage(CreateTemplate),
+		ImageLoaded(CreateTemplate),
+		Processing(CreateTemplate),
+		TemplateReady(CreateTemplate);
 
 		private List<State> subStates;
 
-		public static final S INITIAL_STATE = CREATE_TEMPLATE;
+		// Start with NoImage
+		public static final S INITIAL_STATE = NoImage;
 
 		private S(State... subS) {
 			this.subStates = new ArrayList<>(Arrays.asList(subS));
 		}
-		
+
 		@Override
 		public boolean isSuperStateOf(State s) {
-			boolean result = (s == null) || (this == s); // self contained
-			for (State state : this.subStates) // or
-				result |= state.isSuperStateOf(s); // contained in a sub state!
+			boolean result = (s == null) || (this == s);
+			for (State state : this.subStates)
+				result |= state.isSuperStateOf(s);
 			return result;
 		}
 
@@ -39,5 +41,4 @@ public interface State {
 			return (state != null) && state.isSuperStateOf(this);
 		}
 	}
-
 }

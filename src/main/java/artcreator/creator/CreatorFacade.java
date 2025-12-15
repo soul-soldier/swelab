@@ -5,29 +5,35 @@ import artcreator.creator.port.Creator;
 import artcreator.domain.DomainFactory;
 import artcreator.statemachine.StateMachineFactory;
 import artcreator.statemachine.port.StateMachine;
-import artcreator.statemachine.port.State.S;
 
 public class CreatorFacade implements CreatorFactory, Creator {
 
-	private CreatorImpl creator;
+	private CreatorImpl creatorImpl;
 	private StateMachine stateMachine;
-	
+
 	@Override
 	public Creator creator() {
-		if (this.creator == null) {
+		if (this.creatorImpl == null) {
 			this.stateMachine = StateMachineFactory.FACTORY.stateMachine();
-			this.creator = new CreatorImpl(stateMachine, DomainFactory.FACTORY.domain());
+			this.creatorImpl = new CreatorImpl(stateMachine, DomainFactory.FACTORY.domain());
 		}
 		return this;
 	}
 
-	@Override
-	public synchronized void sysop(String str) {
-		if (this.stateMachine.getState().isSubStateOf( S.CREATE_TEMPLATE /* choose right state*/ ))
-			this.creator.sysop(str);
-	}
-	
-	
-	
+	// --- Delegation Methods ---
 
+	@Override
+	public Object importImage(String path) {
+		return this.creatorImpl.importImage(path);
+	}
+
+	@Override
+	public Object applyTransformation(Object transformConfig) {
+		return this.creatorImpl.applyTransformation(transformConfig);
+	}
+
+	@Override
+	public Object generateTemplate(Object templateConfig) {
+		return this.creatorImpl.generateTemplate(templateConfig);
+	}
 }
