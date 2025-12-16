@@ -1,5 +1,7 @@
 package artcreator.creator.impl;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -15,9 +17,9 @@ public class CreatorImpl implements Creator {
 
 	// We hold the current image in the logic
 	private Object currentImage;
-	// Keep one-step undo 
-	// TODO: maybe add more history later (array last 5 images)
-	private Object previousImage;
+	// Keep up to 3 transformations in history for undo
+	private final Deque<Object> transformationHistory = new ArrayDeque<>();
+	private static final int MAX_HISTORY_SIZE = 3;
 
 	public CreatorImpl(StateMachine stateMachine, Domain domain) {
 		this.stateMachine = stateMachine;
@@ -65,8 +67,11 @@ public class CreatorImpl implements Creator {
 		String operation = (String) config; // "rotate_left" or "rotate_right"
 
 		try {
-			// 2. Save previous image (single-level undo) and delegate to Domain
-			this.previousImage = this.currentImage;
+			// 2. Save current image to history (maintaining up to MAX_HISTORY_SIZE entries)
+			this.transformationHistory.push(this.currentImage);
+			if (this.transformationHistory.size() > MAX_HISTORY_SIZE) {
+				this.transformationHistory.removeLast();
+			}
 			Logger.getGlobal().log(Level.INFO, "Applying transformation: {0}", operation);
 			Object modifiedImage = domain.transformImage(this.currentImage, operation);
 
@@ -87,13 +92,11 @@ public class CreatorImpl implements Creator {
 
 	@Override
 	public Object undoLastTransformation() throws IllegalStateException {
-		if (this.previousImage == null) {
+		if (this.transformationHistory.isEmpty()) {
 			throw new IllegalStateException("No transformation to undo.");
 		}
 		try {
-			Object restored = this.previousImage;
-			// clear previousImage and set current
-			this.previousImage = null;
+			Object restored = this.transformationHistory.pop();
 			this.currentImage = restored;
 			// notify UI/state
 			this.stateMachine.setState(S.ImageLoaded);
