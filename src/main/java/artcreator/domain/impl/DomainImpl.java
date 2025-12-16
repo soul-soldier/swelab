@@ -22,7 +22,8 @@ public class DomainImpl {
 
 		BufferedImage src = (BufferedImage) imageObj;
 
-		switch (operation.toLowerCase()) {
+		String op = operation.toLowerCase();
+		switch (op) {
 			case "rotate_left":
 				return rotate(src, -90);
 			case "rotate_right":
@@ -34,7 +35,34 @@ public class DomainImpl {
 				return mirror(src, true);
 			case "mirror_vertical":
 				return mirror(src, false);
+			case "crop_center":
+				// center crop: take half width/height centered
+				int cw = Math.max(1, src.getWidth() / 2);
+				int ch = Math.max(1, src.getHeight() / 2);
+				int cx = Math.max(0, (src.getWidth() - cw) / 2);
+				int cy = Math.max(0, (src.getHeight() - ch) / 2);
+				return src.getSubimage(cx, cy, cw, ch);
 			default:
+				// support crop with explicit params: "crop:x,y,w,h"
+				if (op.startsWith("crop:")) {
+					try {
+						String[] parts = operation.substring(operation.indexOf(':') + 1).split(",");
+						if (parts.length == 4) {
+							int x = Integer.parseInt(parts[0].trim());
+							int y = Integer.parseInt(parts[1].trim());
+							int w2 = Integer.parseInt(parts[2].trim());
+							int h2 = Integer.parseInt(parts[3].trim());
+							// clamp
+							x = Math.max(0, Math.min(x, src.getWidth() - 1));
+							y = Math.max(0, Math.min(y, src.getHeight() - 1));
+							w2 = Math.max(1, Math.min(w2, src.getWidth() - x));
+							h2 = Math.max(1, Math.min(h2, src.getHeight() - y));
+							return src.getSubimage(x, y, w2, h2);
+						}
+					} catch (Exception ex) {
+						throw new IllegalArgumentException("Invalid crop parameters: " + ex.getMessage(), ex);
+					}
+				}
 				throw new IllegalArgumentException("Unknown transformation: " + operation);
 		}
 	}

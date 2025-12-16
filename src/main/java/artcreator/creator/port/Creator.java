@@ -22,6 +22,14 @@ public interface Creator {
 	Object applyTransformation(Object transformConfig) throws IllegalStateException;
 
 	/**
+	 * Undo the last transformation (single-level undo).
+	 * 
+	 * @return The restored image object.
+	 * @throws IllegalStateException if undo is not possible.
+	 */
+	Object undoLastTransformation() throws IllegalStateException;
+
+	/**
 	 * Generates the art template based on material and color parameters.
 	 * @param templateConfig Configuration for the template (material, size, colors).
 	 * @return The final template object ready for preview/export.

@@ -29,24 +29,56 @@ public class Controller implements ActionListener, Observer {
 		this.subject.attach(this);
 	}
 
+	private boolean croppingMode = false;
+
 	@Override
 	public void actionPerformed(ActionEvent e) {
 		String command = ((JButton) e.getSource()).getText();
 
+		// If we're in cropping mode, only allow Apply/Cancel actions
+		if (croppingMode) {
+			if ("Apply Crop".equals(command)) {
+				String cropOp = myView.getSelectionCropOperation();
+				if (cropOp == null) {
+					JOptionPane.showMessageDialog(myView, "No selection made. Please select an area before applying.",
+							"No Selection", JOptionPane.INFORMATION_MESSAGE);
+					return;
+				}
+				handleTransformation(cropOp, true);
+				return;
+			} else if ("Cancel Crop".equals(command)) {
+				myView.clearSelection();
+				exitCropMode();
+				return;
+			} else {
+				JOptionPane.showMessageDialog(myView, "Finish cropping first (Apply or Cancel).", "Crop In Progress",
+						JOptionPane.INFORMATION_MESSAGE);
+				return;
+			}
+		}
+
+		// Normal (non-cropping) interactions
 		if ("Import Image".equals(command)) {
 			handleImport();
 		} else if ("Rotate Left ↺".equals(command)) {
-			handleTransformation("rotate_left");
+			handleTransformation("rotate_left", false);
 		} else if ("Rotate Right ↻".equals(command)) {
-			handleTransformation("rotate_right");
+			handleTransformation("rotate_right", false);
 		} else if ("Mirror H".equals(command)) {
-			handleTransformation("mirror_horizontal");
+			handleTransformation("mirror_horizontal", false);
 		} else if ("Mirror V".equals(command)) {
-			handleTransformation("mirror_vertical");
+			handleTransformation("mirror_vertical", false);
+		} else if ("Crop".equals(command)) {
+			// Enter cropping mode: user can now click-and-drag, then Apply/Cancel
+			croppingMode = true;
+			myView.setCropMode(true);
+			return;
+		} else if ("Undo".equals(command)) {
+			handleUndo();
 		}
 	}
 
-	private void handleTransformation(String operation) {
+	private void handleTransformation(String operation, boolean exitCropModeAfter) {
 		// Run logic asynchronously
 		CompletableFuture.supplyAsync(() -> {
 			try {
@@ -59,12 +91,46 @@ public class Controller implements ActionListener, Observer {
 			// Update View
 			SwingUtilities.invokeLater(() -> {
 				myView.displayImage(modifiedImage);
+				// clear any selection after applying the operation
+				myView.clearSelection();
+				if (exitCropModeAfter) {
+					exitCropMode();
+				}
 			});
 		}).exceptionally(ex -> {
 			SwingUtilities.invokeLater(() -> {
 				String msg = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
 				JOptionPane.showMessageDialog(myView,
 						msg, "Error", JOptionPane.WARNING_MESSAGE);
+			});
+			return null;
+		});
+	}
+
+	private void exitCropMode() {
+		this.croppingMode = false;
+		this.myView.setCropMode(false);
+		this.myView.clearSelection();
+	}
+
+	private void handleUndo() {
+		CompletableFuture.supplyAsync(() -> {
+			try {
+				return myModel.undoLastTransformation();
+			} catch (IllegalStateException ex) {
+				throw ex;
+			} catch (Exception ex) {
+				throw new RuntimeException(ex);
+			}
+		}).thenAccept(restored -> {
+			SwingUtilities.invokeLater(() -> {
+				myView.displayImage(restored);
+			});
+		}).exceptionally(ex -> {
+			SwingUtilities.invokeLater(() -> {
+				String msg = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
+				JOptionPane.showMessageDialog(myView,
+						msg, "Undo Failed", JOptionPane.WARNING_MESSAGE);
 			});
 			return null;
 		});

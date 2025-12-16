@@ -33,6 +33,11 @@ public class CreatorFacade implements CreatorFactory, Creator {
 	}
 
 	@Override
+	public Object undoLastTransformation() throws IllegalStateException {
+		return this.creatorImpl.undoLastTransformation();
+	}
+
+	@Override
 	public Object generateTemplate(Object templateConfig) {
 		return this.creatorImpl.generateTemplate(templateConfig);
 	}
