@@ -10,7 +10,7 @@ public interface State {
 	boolean isSuperStateOf(State state);
 
 	public enum S implements State {
-		// Root States
+		// Root State
 		CreateTemplate,
 
 		// Concrete States
@@ -21,7 +21,7 @@ public interface State {
 
 		private List<State> subStates;
 
-		// Start with NoImage
+		// Initial state is NoImage
 		public static final S INITIAL_STATE = NoImage;
 
 		private S(State... subS) {

@@ -3,26 +3,32 @@ package artcreator.domain;
 import artcreator.domain.impl.DomainImpl;
 import artcreator.domain.port.Domain;
 
-public class DomainFacade implements DomainFactory, Domain{
+public class DomainFacade implements DomainFactory, Domain {
 
-	
-	private DomainImpl domain = new DomainImpl();
-	
-	
+	// Instanz der eigentlichen Implementierung
+	private DomainImpl domainImpl = new DomainImpl();
+
 	@Override
 	public synchronized Domain domain() {
-		if (this.domain == null)
-				this.domain = new DomainImpl();
-			return this;
+		if (this.domainImpl == null) {
+			this.domainImpl = new DomainImpl();
 		}
-
-	
-	@Override
-	public synchronized Object mkObject() {
-		return this.domain.mkObject();
+		return this;
 	}
 
+	// --- Delegation der Methoden ---
 
+	@Override
+	public Object mkObject() {
+		return this.domainImpl.mkObject();
+	}
 
-
+	/**
+	 * Hier fehlte die Weiterleitung.
+	 * Die Facade reicht den Aufruf an die Implementierung weiter.
+	 */
+	@Override
+	public Object loadImage(String path) throws Exception {
+		return this.domainImpl.loadImage(path);
+	}
 }
