@@ -1,7 +1,6 @@
 package artcreator.gui;
 
 import java.awt.BorderLayout;
-import java.awt.Dimension;
 import java.awt.Image;
 import java.util.TooManyListenersException;
 
@@ -38,6 +37,8 @@ public class CreatorFrame extends JFrame implements Observer {
 
 	private JButton btnRotateLeft = new JButton("Rotate Left ↺");
 	private JButton btnRotateRight = new JButton("Rotate Right ↻");
+	private JButton btnMirrorH = new JButton("Mirror H");
+	private JButton btnMirrorV = new JButton("Mirror V");
 
 	public CreatorFrame() throws TooManyListenersException {
 		super("ArtCreator 3D");
@@ -54,10 +55,14 @@ public class CreatorFrame extends JFrame implements Observer {
 		this.btnImport.addActionListener(this.controller);
 		this.btnRotateLeft.addActionListener(this.controller);
 		this.btnRotateRight.addActionListener(this.controller);
+		this.btnMirrorH.addActionListener(this.controller);
+		this.btnMirrorV.addActionListener(this.controller);
 
 		this.buttonPanel.add(this.btnImport);
 		this.buttonPanel.add(this.btnRotateLeft);
 		this.buttonPanel.add(this.btnRotateRight);
+		this.buttonPanel.add(this.btnMirrorH);
+		this.buttonPanel.add(this.btnMirrorV);
 
 		this.add(this.buttonPanel, BorderLayout.NORTH);
 

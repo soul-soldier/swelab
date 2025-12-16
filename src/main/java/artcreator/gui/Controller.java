@@ -35,12 +35,14 @@ public class Controller implements ActionListener, Observer {
 
 		if ("Import Image".equals(command)) {
 			handleImport();
-		}
-		else if ("Rotate Left ↺".equals(command)) {
+		} else if ("Rotate Left ↺".equals(command)) {
 			handleTransformation("rotate_left");
-		}
-		else if ("Rotate Right ↻".equals(command)) {
+		} else if ("Rotate Right ↻".equals(command)) {
 			handleTransformation("rotate_right");
+		} else if ("Mirror H".equals(command)) {
+			handleTransformation("mirror_horizontal");
+		} else if ("Mirror V".equals(command)) {
+			handleTransformation("mirror_vertical");
 		}
 	}
 

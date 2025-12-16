@@ -1,8 +1,8 @@
 package artcreator.domain.impl;
-
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
+
 import javax.imageio.ImageIO;
 
 public class DomainImpl {
@@ -27,6 +27,13 @@ public class DomainImpl {
 				return rotate(src, -90);
 			case "rotate_right":
 				return rotate(src, 90);
+			case "mirror":
+				// default mirror horizontally
+				return mirror(src, true);
+			case "mirror_horizontal":
+				return mirror(src, true);
+			case "mirror_vertical":
+				return mirror(src, false);
 			default:
 				throw new IllegalArgumentException("Unknown transformation: " + operation);
 		}
@@ -65,6 +72,32 @@ public class DomainImpl {
 		g2d.drawImage(src, 0, 0, null);
 		g2d.dispose();
 
+		return dest;
+	}
+
+	/**
+	 * Mirrors the image horizontally or vertically.
+	 * 
+	 * @param src        source image
+	 * @param horizontal true = horizontal mirror (left-right), false = vertical
+	 *                   (top-bottom)
+	 */
+	private BufferedImage mirror(BufferedImage src, boolean horizontal) {
+		int w = src.getWidth();
+		int h = src.getHeight();
+		BufferedImage dest = new BufferedImage(w, h, src.getType());
+		Graphics2D g2d = dest.createGraphics();
+		if (horizontal) {
+			// flip left-right: translate to right edge then scale X by -1
+			g2d.translate(w, 0);
+			g2d.scale(-1, 1);
+		} else {
+			// flip top-bottom: translate to bottom then scale Y by -1
+			g2d.translate(0, h);
+			g2d.scale(1, -1);
+		}
+		g2d.drawImage(src, 0, 0, null);
+		g2d.dispose();
 		return dest;
 	}
 }
