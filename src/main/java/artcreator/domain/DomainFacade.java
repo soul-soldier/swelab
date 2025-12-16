@@ -31,4 +31,9 @@ public class DomainFacade implements DomainFactory, Domain {
 	public Object loadImage(String path) throws Exception {
 		return this.domainImpl.loadImage(path);
 	}
+
+	@Override
+	public Object transformImage(Object image, String operation) {
+		return this.domainImpl.transformImage(image, operation);
+	}
 }

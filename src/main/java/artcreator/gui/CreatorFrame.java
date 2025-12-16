@@ -36,6 +36,9 @@ public class CreatorFrame extends JFrame implements Observer {
 	private JLabel imageLabel = new JLabel("No image loaded", SwingConstants.CENTER);
 	private JPanel buttonPanel = new JPanel();
 
+	private JButton btnRotateLeft = new JButton("Rotate Left ↺");
+	private JButton btnRotateRight = new JButton("Rotate Right ↻");
+
 	public CreatorFrame() throws TooManyListenersException {
 		super("ArtCreator 3D");
 		this.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
@@ -49,7 +52,13 @@ public class CreatorFrame extends JFrame implements Observer {
 
 		// --- Top: Buttons ---
 		this.btnImport.addActionListener(this.controller);
+		this.btnRotateLeft.addActionListener(this.controller);
+		this.btnRotateRight.addActionListener(this.controller);
+
 		this.buttonPanel.add(this.btnImport);
+		this.buttonPanel.add(this.btnRotateLeft);
+		this.buttonPanel.add(this.btnRotateRight);
+
 		this.add(this.buttonPanel, BorderLayout.NORTH);
 
 		// --- Center: Image Display ---

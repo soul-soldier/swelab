@@ -36,6 +36,36 @@ public class Controller implements ActionListener, Observer {
 		if ("Import Image".equals(command)) {
 			handleImport();
 		}
+		else if ("Rotate Left ↺".equals(command)) {
+			handleTransformation("rotate_left");
+		}
+		else if ("Rotate Right ↻".equals(command)) {
+			handleTransformation("rotate_right");
+		}
+	}
+
+	private void handleTransformation(String operation) {
+		// Run logic asynchronously
+		CompletableFuture.supplyAsync(() -> {
+			try {
+				return myModel.applyTransformation(operation);
+			} catch (IllegalStateException ex) {
+				// If state is invalid (no image), this is caught here
+				throw ex;
+			}
+		}).thenAccept(modifiedImage -> {
+			// Update View
+			SwingUtilities.invokeLater(() -> {
+				myView.displayImage(modifiedImage);
+			});
+		}).exceptionally(ex -> {
+			SwingUtilities.invokeLater(() -> {
+				String msg = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
+				JOptionPane.showMessageDialog(myView,
+						msg, "Error", JOptionPane.WARNING_MESSAGE);
+			});
+			return null;
+		});
 	}
 
 	private void handleImport() {

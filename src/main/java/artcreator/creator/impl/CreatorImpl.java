@@ -46,9 +46,41 @@ public class CreatorImpl implements Creator {
 		}
 	}
 
-	// Stub implementations for other methods to satisfy interface
 	@Override
-	public Object applyTransformation(Object config) { return null; }
+	public Object applyTransformation(Object config) throws IllegalStateException {
+		// 1. Validate State (Must have an image loaded)
+		// We check if we are in ImageLoaded OR TemplateReady (as you might want to adjust after generation)
+		// But strictly per diagram: ImageLoaded
+		if (!this.stateMachine.getState().isSubStateOf(S.ImageLoaded)) {
+			throw new IllegalStateException("No image loaded to transform.");
+		}
+
+		if (this.currentImage == null) {
+			throw new IllegalStateException("Internal Error: Image reference is null despite valid state.");
+		}
+
+		String operation = (String) config; // "rotate_left" or "rotate_right"
+
+		try {
+			// 2. Delegate to Domain
+			Logger.getGlobal().log(Level.INFO, "Applying transformation: {0}", operation);
+			Object modifiedImage = domain.transformImage(this.currentImage, operation);
+
+			// 3. Update Internal State
+			this.currentImage = modifiedImage;
+
+			// 4. Trigger UI Update (Notify observers)
+			// Even though the enum S.ImageLoaded hasn't changed, re-setting it forces notify()
+			this.stateMachine.setState(S.ImageLoaded);
+
+			return this.currentImage;
+
+		} catch (Exception e) {
+			Logger.getGlobal().log(Level.SEVERE, "Transformation failed", e);
+			throw new RuntimeException("Transformation failed: " + e.getMessage());
+		}
+	}
+
 	@Override
 	public Object generateTemplate(Object config) { return null; }
 }
