@@ -1,9 +1,15 @@
 package artcreator.domain.impl;
+
+import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.File;
 
 import javax.imageio.ImageIO;
+
+import artcreator.domain.port.MaterialType;
+import artcreator.domain.port.TemplateConfiguration;
 
 public class DomainImpl {
 
@@ -65,6 +71,89 @@ public class DomainImpl {
 				}
 				throw new IllegalArgumentException("Unknown transformation: " + operation);
 		}
+	}
+
+	public Object generateTemplate(Object imageObj, Object templateConfig) {
+		if (!(imageObj instanceof BufferedImage)) {
+			throw new IllegalArgumentException("Invalid image object provided.");
+		}
+		if (!(templateConfig instanceof TemplateConfiguration)) {
+			throw new IllegalArgumentException("Invalid template configuration.");
+		}
+		BufferedImage src = (BufferedImage) imageObj;
+		TemplateConfiguration cfg = (TemplateConfiguration) templateConfig;
+
+		// 1) Scale image to raster resolution
+		BufferedImage scaled = scale(src, cfg.getWidth(), cfg.getHeight());
+
+		// 2) Convert pixels to grayscale + 3) Quantize to cfg.colorCount levels
+		int w = scaled.getWidth();
+		int h = scaled.getHeight();
+		int levels = cfg.getColorCount();
+		int[][] idx = new int[h][w];
+		int[] levelToGray = new int[levels];
+		for (int i = 0; i < levels; i++) {
+			levelToGray[i] = (int) Math.round(i * (255.0 / (levels - 1)));
+		}
+
+		for (int y = 0; y < h; y++) {
+			for (int x = 0; x < w; x++) {
+				int rgb = scaled.getRGB(x, y);
+				int r = (rgb >> 16) & 0xFF;
+				int g = (rgb >> 8) & 0xFF;
+				int b = (rgb) & 0xFF;
+				int gray = (int) Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+				int bucket = (int) Math.round(gray * (levels - 1) / 255.0);
+				bucket = Math.max(0, Math.min(levels - 1, bucket));
+				idx[y][x] = bucket;
+			}
+		}
+
+		return renderPixelPreview(cfg, idx, levelToGray);
+	}
+
+	private BufferedImage scale(BufferedImage src, int targetW, int targetH) {
+		BufferedImage out = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_RGB);
+		Graphics2D g2 = out.createGraphics();
+		g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+		g2.setColor(Color.WHITE);
+		g2.fillRect(0, 0, targetW, targetH);
+		g2.drawImage(src, 0, 0, targetW, targetH, null);
+		g2.dispose();
+		return out;
+	}
+
+	private BufferedImage renderPixelPreview(TemplateConfiguration cfg, int[][] idx, int[] levelToGray) {
+		int rasterH = idx.length;
+		int rasterW = idx[0].length;
+
+		// Raster cell size (preview). For "Bügelperlen" spacing is fixed.
+		int cell = cfg.getMaterialType() == MaterialType.BUEGELPERLEN ? 16 : Math.max(4, cfg.getPointSpacing());
+		int padding = 8;
+		int outW = padding + (rasterW * cell) + padding;
+		int outH = padding + (rasterH * cell) + padding;
+
+		BufferedImage out = new BufferedImage(outW, outH, BufferedImage.TYPE_INT_RGB);
+		Graphics2D g2 = out.createGraphics();
+		g2.setColor(Color.WHITE);
+		g2.fillRect(0, 0, outW, outH);
+
+		// Draw pixel raster (no numbers, no legend)
+		for (int y = 0; y < rasterH; y++) {
+			for (int x = 0; x < rasterW; x++) {
+				int bucket = idx[y][x];
+				int gray = levelToGray[bucket];
+				int px = padding + x * cell;
+				int py = padding + y * cell;
+				g2.setColor(new Color(gray, gray, gray));
+				g2.fillRect(px, py, cell, cell);
+				g2.setColor(Color.LIGHT_GRAY);
+				g2.drawRect(px, py, cell, cell);
+			}
+		}
+
+		g2.dispose();
+		return out;
 	}
 
 	/**

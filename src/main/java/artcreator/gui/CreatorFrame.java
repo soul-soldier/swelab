@@ -30,7 +30,9 @@ public class CreatorFrame extends JFrame implements Observer {
 	// UI Components
 	private JButton btnImport = new JButton("Import Image");
 	private SelectableImageLabel imageLabel = new SelectableImageLabel();
-	private JPanel buttonPanel = new JPanel();
+	private JPanel buttonPanel = new JPanel(new BorderLayout());
+	private JPanel leftButtonPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
+	private JPanel rightButtonPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT));
 	// crop-mode buttons
 	private JButton btnApplyCrop = new JButton("Apply Crop");
 	private JButton btnCancelCrop = new JButton("Cancel Crop");
@@ -40,13 +42,18 @@ public class CreatorFrame extends JFrame implements Observer {
 	private JButton btnMirrorH = new JButton("Mirror H");
 	private JButton btnMirrorV = new JButton("Mirror V");
 	private JButton btnCropCenter = new JButton("Crop");
+	private JButton btnGenerateTemplate = new JButton("Generate Template");
 	private JButton btnUndo = new JButton("Undo");
 
 	public CreatorFrame() throws TooManyListenersException {
 		super("ArtCreator 3D");
 		this.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-		this.setSize(800, 600); // Slightly larger for image viewing
+		// Start in a large window (maximized when supported) so the toolbar buttons
+		// remain visible even on smaller screens.
+		this.setMinimumSize(new java.awt.Dimension(1000, 700));
+		this.setSize(1100, 800);
 		this.setLocationRelativeTo(null);
+		this.setExtendedState(JFrame.MAXIMIZED_BOTH);
 		this.setLayout(new BorderLayout());
 
 		// Observe State
@@ -60,19 +67,27 @@ public class CreatorFrame extends JFrame implements Observer {
 		this.btnMirrorH.addActionListener(this.controller);
 		this.btnMirrorV.addActionListener(this.controller);
 		this.btnCropCenter.addActionListener(this.controller);
+		this.btnGenerateTemplate.addActionListener(this.controller);
 		this.btnApplyCrop.addActionListener(this.controller);
 		this.btnCancelCrop.addActionListener(this.controller);
 		this.btnUndo.addActionListener(this.controller);
+		this.btnGenerateTemplate.setToolTipText("Next step: opens template generation window");
 
-		this.buttonPanel.add(this.btnImport);
-		this.buttonPanel.add(this.btnRotateLeft);
-		this.buttonPanel.add(this.btnRotateRight);
-		this.buttonPanel.add(this.btnMirrorH);
-		this.buttonPanel.add(this.btnMirrorV);
-		this.buttonPanel.add(this.btnCropCenter);
-		this.buttonPanel.add(this.btnApplyCrop);
-		this.buttonPanel.add(this.btnCancelCrop);
-		this.buttonPanel.add(this.btnUndo);
+		// Left-aligned: image actions / transforms
+		this.leftButtonPanel.add(this.btnImport);
+		this.leftButtonPanel.add(this.btnRotateLeft);
+		this.leftButtonPanel.add(this.btnRotateRight);
+		this.leftButtonPanel.add(this.btnMirrorH);
+		this.leftButtonPanel.add(this.btnMirrorV);
+		this.leftButtonPanel.add(this.btnCropCenter);
+		this.leftButtonPanel.add(this.btnApplyCrop);
+		this.leftButtonPanel.add(this.btnCancelCrop);
+		this.leftButtonPanel.add(this.btnUndo);
+
+		// Right-aligned: next-step action
+		this.rightButtonPanel.add(this.btnGenerateTemplate);
+		this.buttonPanel.add(this.leftButtonPanel, BorderLayout.WEST);
+		this.buttonPanel.add(this.rightButtonPanel, BorderLayout.EAST);
 
 		this.add(this.buttonPanel, BorderLayout.NORTH);
 
@@ -87,6 +102,9 @@ public class CreatorFrame extends JFrame implements Observer {
 		// Crop buttons hidden by default
 		this.btnApplyCrop.setVisible(false);
 		this.btnCancelCrop.setVisible(false);
+
+		// Apply initial enabled/disabled state immediately
+		this.update(this.subject.getState());
 	}
 
 	/**
@@ -272,7 +290,31 @@ public class CreatorFrame extends JFrame implements Observer {
 		// Example: Enable/Disable buttons based on state
 		System.out.println("GUI: State changed to " + newState);
 
-		// If we are processing, disable import
-		this.btnImport.setEnabled(newState != S.Processing);
+		boolean isProcessing = newState == S.Processing;
+		boolean hasImage = newState == S.ImageLoaded || newState == S.TemplateReady;
+
+		// Import is disabled while processing.
+		this.btnImport.setEnabled(!isProcessing);
+
+		// Next-step action only available when an image exists and we're not
+		// processing.
+		this.btnGenerateTemplate.setEnabled(hasImage && !isProcessing);
+
+		// Transform actions should only be available when there is an image to work
+		// with.
+		boolean enableTransforms = hasImage && !isProcessing;
+		this.btnRotateLeft.setEnabled(enableTransforms);
+		this.btnRotateRight.setEnabled(enableTransforms);
+		this.btnMirrorH.setEnabled(enableTransforms);
+		this.btnMirrorV.setEnabled(enableTransforms);
+		this.btnCropCenter.setEnabled(enableTransforms);
+		this.btnUndo.setEnabled(enableTransforms);
+
+		// If no image is loaded (or we're processing), crop mode controls must not be
+		// visible.
+		if (!enableTransforms) {
+			this.btnApplyCrop.setVisible(false);
+			this.btnCancelCrop.setVisible(false);
+		}
 	}
 }

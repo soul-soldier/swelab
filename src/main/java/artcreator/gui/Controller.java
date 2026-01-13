@@ -21,6 +21,7 @@ public class Controller implements ActionListener, Observer {
 	private CreatorFrame myView;
 	private Creator myModel;
 	private Subject subject;
+	private Object currentImage;
 
 	public Controller(CreatorFrame view, Subject subject, Creator model) {
 		this.myView = view;
@@ -73,6 +74,8 @@ public class Controller implements ActionListener, Observer {
 			croppingMode = true;
 			myView.setCropMode(true);
 			return;
+		} else if ("Generate Template".equals(command)) {
+			handleOpenTemplateGeneration();
 		} else if ("Undo".equals(command)) {
 			handleUndo();
 		}
@@ -90,6 +93,7 @@ public class Controller implements ActionListener, Observer {
 		}).thenAccept(modifiedImage -> {
 			// Update View
 			SwingUtilities.invokeLater(() -> {
+				this.currentImage = modifiedImage;
 				myView.displayImage(modifiedImage);
 				// clear any selection after applying the operation
 				myView.clearSelection();
@@ -124,6 +128,7 @@ public class Controller implements ActionListener, Observer {
 			}
 		}).thenAccept(restored -> {
 			SwingUtilities.invokeLater(() -> {
+				this.currentImage = restored;
 				myView.displayImage(restored);
 			});
 		}).exceptionally(ex -> {
@@ -158,6 +163,7 @@ public class Controller implements ActionListener, Observer {
 			}).thenAccept(loadedImage -> {
 				// 3. Update View (Must be back on Swing Thread)
 				SwingUtilities.invokeLater(() -> {
+					this.currentImage = loadedImage;
 					myView.displayImage(loadedImage);
 				});
 			}).exceptionally(ex -> {
@@ -170,6 +176,25 @@ public class Controller implements ActionListener, Observer {
 				});
 				return null;
 			});
+		}
+	}
+
+	private void handleOpenTemplateGeneration() {
+		if (this.currentImage == null) {
+			JOptionPane.showMessageDialog(myView, "Please import an image first.", "No Image",
+					JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		// Open the next-step view as a modal dialog.
+		// Do NOT disable the main window preemptively; if dialog construction is
+		// slow/fails,
+		// disabling the owner makes the app look frozen.
+		try {
+			TemplateDialog dialog = new TemplateDialog(myView, myModel, this.currentImage);
+			dialog.setVisible(true);
+		} catch (Exception ex) {
+			String msg = ex.getMessage() != null ? ex.getMessage() : String.valueOf(ex);
+			JOptionPane.showMessageDialog(myView, msg, "Cannot Open Template Generation", JOptionPane.ERROR_MESSAGE);
 		}
 	}
 

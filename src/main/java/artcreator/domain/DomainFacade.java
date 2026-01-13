@@ -36,4 +36,9 @@ public class DomainFacade implements DomainFactory, Domain {
 	public Object transformImage(Object image, String operation) {
 		return this.domainImpl.transformImage(image, operation);
 	}
+
+	@Override
+	public Object generateTemplate(Object image, Object templateConfig) {
+		return this.domainImpl.generateTemplate(image, templateConfig);
+	}
 }

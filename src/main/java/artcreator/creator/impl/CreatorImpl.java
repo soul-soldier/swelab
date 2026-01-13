@@ -54,9 +54,10 @@ public class CreatorImpl implements Creator {
 	@Override
 	public Object applyTransformation(Object config) throws IllegalStateException {
 		// 1. Validate State (Must have an image loaded)
-		// We check if we are in ImageLoaded OR TemplateReady (as you might want to adjust after generation)
-		// But strictly per diagram: ImageLoaded
-		if (!this.stateMachine.getState().isSubStateOf(S.ImageLoaded)) {
+		artcreator.statemachine.port.State state = this.stateMachine.getState();
+		boolean stateOk = state != null
+				&& (state.isSubStateOf(S.ImageLoaded) || state.isSubStateOf(S.TemplateReady));
+		if (!stateOk) {
 			throw new IllegalStateException("No image loaded to transform.");
 		}
 
@@ -107,5 +108,41 @@ public class CreatorImpl implements Creator {
 	}
 
 	@Override
-	public Object generateTemplate(Object config) { return null; }
+	public Object generateTemplate(Object config) throws IllegalStateException {
+		// 1. State Check (allow generation if an image is loaded; optionally allow
+		// regeneration)
+		artcreator.statemachine.port.State state = this.stateMachine.getState();
+		boolean stateOk = state != null
+				&& (state.isSubStateOf(S.ImageLoaded) || state.isSubStateOf(S.TemplateReady));
+		if (!stateOk) {
+			throw new IllegalStateException("No image loaded (or system busy). Cannot generate template.");
+		}
+		if (this.currentImage == null) {
+			throw new IllegalStateException("Internal Error: Image reference is null despite valid state.");
+		}
+
+		try {
+			// 2. State Transition
+			this.stateMachine.setState(S.Processing);
+
+			// 3. Logic Delegation
+			Logger.getGlobal().log(Level.INFO, "Generating template...");
+			Object previewImage = this.domain.generateTemplate(this.currentImage, config);
+
+			// 4. Update State
+			this.stateMachine.setState(S.TemplateReady);
+
+			// 5. Return Result
+			return previewImage;
+		} catch (RuntimeException e) {
+			Logger.getGlobal().log(Level.SEVERE, "Template generation failed", e);
+			// best-effort revert state back to image loaded so user can continue
+			this.stateMachine.setState(S.ImageLoaded);
+			throw e;
+		} catch (Exception e) {
+			Logger.getGlobal().log(Level.SEVERE, "Template generation failed", e);
+			this.stateMachine.setState(S.ImageLoaded);
+			throw new RuntimeException("Template generation failed: " + e.getMessage(), e);
+		}
+	}
 }

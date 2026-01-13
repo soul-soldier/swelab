@@ -14,4 +14,14 @@ public interface Domain {
 	 * @return The new, modified image object.
 	 */
 	Object transformImage(Object image, String operation);
+
+	/**
+	 * Generates a template preview image based on the given image and
+	 * configuration.
+	 * 
+	 * @param image          current image object (e.g. BufferedImage)
+	 * @param templateConfig configuration object (typically TemplateConfiguration)
+	 * @return a preview image object (e.g. BufferedImage)
+	 */
+	Object generateTemplate(Object image, Object templateConfig);
 }

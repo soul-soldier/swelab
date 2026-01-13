@@ -8,11 +8,11 @@ import artcreator.creator.port.Creator;
 import artcreator.domain.DomainFactory;
 import artcreator.domain.port.Domain;
 import artcreator.statemachine.StateMachineFactory;
-import artcreator.statemachine.port.StateMachine;
-import artcreator.statemachine.port.Subject;
 import artcreator.statemachine.port.Observer;
 import artcreator.statemachine.port.State;
 import artcreator.statemachine.port.State.S;
+import artcreator.statemachine.port.StateMachine;
+import artcreator.statemachine.port.Subject;
 
 class InitTest implements Observer {
 
@@ -24,11 +24,11 @@ class InitTest implements Observer {
 		StateMachine stateMachine = StateMachineFactory.FACTORY.stateMachine();
 		Assertions.assertNotNull(stateMachine);
 		Subject subject = StateMachineFactory.FACTORY.subject();
-		Assertions.assertEquals(stateMachine, subject);
+		Assertions.assertSame(stateMachine, subject);
 		subject.attach(this);
 
-		Assertions.assertTrue(stateMachine.getState().isSubStateOf(S.CREATE_TEMPLATE));
-		Assertions.assertEquals(S.CREATE_TEMPLATE, this.s);
+		Assertions.assertEquals(S.NoImage, stateMachine.getState());
+		Assertions.assertEquals(S.NoImage, this.s);
 		subject.detach(this);
 
 		Domain domain = DomainFactory.FACTORY.domain();
@@ -36,8 +36,6 @@ class InitTest implements Observer {
 
 		Creator creator = CreatorFactory.FACTORY.creator();
 		Assertions.assertNotNull(creator);
-
-		creator.sysop("test");
 		Assertions.assertTrue(true);
 
 	}
