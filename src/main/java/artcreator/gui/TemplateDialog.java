@@ -1,6 +1,7 @@
 package artcreator.gui;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -11,6 +12,7 @@ import java.util.concurrent.CompletableFuture;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -28,6 +30,7 @@ import javax.swing.border.EmptyBorder;
 import artcreator.creator.port.Creator;
 import artcreator.domain.port.MaterialType;
 import artcreator.domain.port.TemplateConfiguration;
+import artcreator.domain.port.TemplateResult;
 
 /**
  * Second step UI: configure template generation and preview original vs template side-by-side.
@@ -40,6 +43,7 @@ public class TemplateDialog extends JDialog {
 	private final transient BufferedImage original;
 
 	private BufferedImage lastPreview;
+    private Color[] lastPalette;
 	private double zoomFactor = 1.0;
 	private volatile long renderSeq = 0;
 
@@ -48,11 +52,12 @@ public class TemplateDialog extends JDialog {
 	private final JPanel legendPanel = new JPanel();
 	private final JLabel legendTitle = new JLabel("Legend");
 
-	private final JComboBox<MaterialType> materialBox = new JComboBox<>(MaterialType.values());
+    private final JComboBox<MaterialType> materialBox = new JComboBox<>(
+            new DefaultComboBoxModel<>(new MaterialType[] { MaterialType.TOOTHPICKS }));
 	private final JSpinner widthSpinner = new JSpinner(new SpinnerNumberModel(40, 5, 500, 1));
 	private final JLabel heightValue = new JLabel("-");
 	private final JSpinner grayLevelsSpinner = new JSpinner(new SpinnerNumberModel(8, 2, 32, 1));
-	private final JSpinner spacingSpinner = new JSpinner(new SpinnerNumberModel(12, 4, 64, 1));
+    private final JSpinner spacingSpinner = new JSpinner(new SpinnerNumberModel(12, 0, 64, 1));
 
 	private final JButton btnGenerate = new JButton("Generate");
 	private final JButton btnZoomIn = new JButton("+");
@@ -87,8 +92,7 @@ public class TemplateDialog extends JDialog {
 		add(previewPanel, BorderLayout.CENTER);
 
 		// init derived height and UI
-		updateDerivedHeight();
-		updateSpacingEnabled();
+        updateDerivedHeight();
 		updateLegend();
 		// Avoid scaling large images on the EDT during construction.
 		originalLabel.setText("Rendering...");
@@ -98,14 +102,18 @@ public class TemplateDialog extends JDialog {
 		// listeners
 		widthSpinner.addChangeListener(e -> {
 			updateDerivedHeight();
+            lastPalette = null;
 			updateLegend();
 		});
-		grayLevelsSpinner.addChangeListener(e -> updateLegend());
-		spacingSpinner.addChangeListener(e -> updateLegend());
-		materialBox.addActionListener(e -> {
-			updateSpacingEnabled();
-			updateLegend();
-		});
+        grayLevelsSpinner.addChangeListener(e -> {
+            lastPalette = null;
+            updateLegend();
+        });
+        spacingSpinner.addChangeListener(e -> {
+            lastPalette = null;
+            updateLegend();
+        });
+        materialBox.addActionListener(e -> updateLegend());
 		btnZoomIn.addActionListener(e -> { zoomFactor = Math.min(4.0, zoomFactor + 0.25); applyZoom(); });
 		btnZoomOut.addActionListener(e -> { zoomFactor = Math.max(0.25, zoomFactor - 0.25); applyZoom(); });
 		btnGenerate.addActionListener(e -> handleGenerate());
@@ -122,7 +130,7 @@ public class TemplateDialog extends JDialog {
 		panel.add(widthSpinner);
 		panel.add(new JLabel("   Height(points): "));
 		panel.add(heightValue);
-		panel.add(new JLabel("   Gray levels: "));
+        panel.add(new JLabel("   Colors: "));
 		panel.add(grayLevelsSpinner);
 		panel.add(new JLabel("   Point spacing: "));
 		panel.add(spacingSpinner);
@@ -186,34 +194,43 @@ public class TemplateDialog extends JDialog {
 		JLabel raster = new JLabel("Raster: " + cfg.getWidth() + " x " + cfg.getHeight());
 		raster.setAlignmentX(LEFT_ALIGNMENT);
 		legendPanel.add(raster);
-		JLabel levelsLabel = new JLabel("Graustufen: " + cfg.getColorCount());
+        JLabel materialAmount = new JLabel("Materialbedarf: " + (cfg.getWidth() * cfg.getHeight()));
+        materialAmount.setAlignmentX(LEFT_ALIGNMENT);
+        legendPanel.add(materialAmount);
+        JLabel levelsLabel = new JLabel("Colors: " + cfg.getColorCount());
 		levelsLabel.setAlignmentX(LEFT_ALIGNMENT);
 		legendPanel.add(levelsLabel);
-		JLabel spacing = new JLabel(cfg.getMaterialType() == MaterialType.BUEGELPERLEN ? "Abstand: (fix)" : ("Abstand: " + cfg.getPointSpacing()));
+        JLabel spacing = new JLabel("Abstand: " + cfg.getPointSpacing());
 		spacing.setAlignmentX(LEFT_ALIGNMENT);
 		legendPanel.add(spacing);
 		JLabel spacerMid = new JLabel(" ");
 		spacerMid.setAlignmentX(LEFT_ALIGNMENT);
 		legendPanel.add(spacerMid);
 
-		int levelCount = cfg.getColorCount();
-		for (int i = 0; i < levelCount; i++) {
-			int gray = (int) Math.round(i * (255.0 / (levelCount - 1)));
-			JPanel row = new JPanel();
-			row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
-			row.setBorder(new EmptyBorder(2, 0, 2, 0));
-			row.setAlignmentX(LEFT_ALIGNMENT);
-			JPanel swatch = new JPanel();
-			swatch.setPreferredSize(new Dimension(18, 18));
-			swatch.setMaximumSize(new Dimension(18, 18));
-			swatch.setMinimumSize(new Dimension(18, 18));
-			swatch.setBackground(new java.awt.Color(gray, gray, gray));
-			swatch.setBorder(javax.swing.BorderFactory.createLineBorder(java.awt.Color.BLACK));
-			row.add(swatch);
-			JLabel rowLabel = new JLabel("  " + (i + 1) + " = " + gray);
-			rowLabel.setAlignmentX(LEFT_ALIGNMENT);
-			row.add(rowLabel);
-			legendPanel.add(row);
+        if (lastPalette == null || lastPalette.length == 0) {
+            JLabel hint = new JLabel("Generate to see palette");
+            hint.setAlignmentX(LEFT_ALIGNMENT);
+            legendPanel.add(hint);
+        } else {
+            for (int i = 0; i < lastPalette.length; i++) {
+                Color c = lastPalette[i];
+                JPanel row = new JPanel();
+                row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
+                row.setBorder(new EmptyBorder(2, 0, 2, 0));
+                row.setAlignmentX(LEFT_ALIGNMENT);
+                JPanel swatch = new JPanel();
+                swatch.setPreferredSize(new Dimension(18, 18));
+                swatch.setMaximumSize(new Dimension(18, 18));
+                swatch.setMinimumSize(new Dimension(18, 18));
+                swatch.setBackground(c);
+                swatch.setBorder(javax.swing.BorderFactory.createLineBorder(java.awt.Color.BLACK));
+                row.add(swatch);
+                String hex = String.format("#%02X%02X%02X", c.getRed(), c.getGreen(), c.getBlue());
+                JLabel rowLabel = new JLabel("  " + (i + 1) + " = " + hex);
+                rowLabel.setAlignmentX(LEFT_ALIGNMENT);
+                row.add(rowLabel);
+                legendPanel.add(row);
+            }
 		}
 
 		legendPanel.revalidate();
@@ -227,22 +244,12 @@ public class TemplateDialog extends JDialog {
 		heightValue.setText(String.valueOf(h));
 	}
 
-	private void updateSpacingEnabled() {
-		MaterialType m = (MaterialType) materialBox.getSelectedItem();
-		boolean allowSpacing = m != MaterialType.BUEGELPERLEN;
-		spacingSpinner.setEnabled(allowSpacing);
-	}
-
 	private TemplateConfiguration currentConfig() {
 		MaterialType m = (MaterialType) materialBox.getSelectedItem();
 		int w = (int) widthSpinner.getValue();
 		int h = Integer.parseInt(heightValue.getText());
 		int levels = (int) grayLevelsSpinner.getValue();
-		int spacing = (int) spacingSpinner.getValue();
-		if (m == MaterialType.BUEGELPERLEN) {
-			// ignored, but keep a value
-			spacing = 16;
-		}
+        int spacing = (int) spacingSpinner.getValue();
 		return new TemplateConfiguration(m, w, h, levels, spacing);
 	}
 
@@ -260,8 +267,16 @@ public class TemplateDialog extends JDialog {
 		CompletableFuture.supplyAsync(() -> creator.generateTemplate(cfg)).thenAccept(preview -> {
 			SwingUtilities.invokeLater(() -> {
 				btnGenerate.setEnabled(true);
-				if (preview instanceof BufferedImage) {
+                if (preview instanceof TemplateResult) {
+                    TemplateResult result = (TemplateResult) preview;
+                    lastPreview = result.getPreview();
+                    lastPalette = result.getPalette();
+                    updateLegend();
+                    applyZoom();
+                } else if (preview instanceof BufferedImage) {
+                    // Backward compatibility if an older implementation returns only an image.
 					lastPreview = (BufferedImage) preview;
+                    lastPalette = null;
 					updateLegend();
 					applyZoom();
 				} else {

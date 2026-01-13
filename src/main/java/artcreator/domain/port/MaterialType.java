@@ -5,6 +5,7 @@ package artcreator.domain.port;
  * One of the types is explicitly "Buegelperlen" where point spacing is fixed.
  */
 public enum MaterialType {
+    TOOTHPICKS("Toothpicks"),
 	BUEGELPERLEN("Buegelperlen"),
 	PAPIER("Papier (Druck)"),
 	HOLZ("Holz (Bohrschablone)");

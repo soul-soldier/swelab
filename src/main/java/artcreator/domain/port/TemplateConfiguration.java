@@ -10,7 +10,7 @@ public final class TemplateConfiguration {
 	private final int height;
 	/** number of grayscale steps to quantize to */
 	private final int colorCount;
-	/** spacing between points / cell size for preview rendering (pixels). Ignored for BUEGELPERLEN. */
+    /** spacing (gap) between points in the preview rendering (pixels). */
 	private final int pointSpacing;
 
 	public TemplateConfiguration(MaterialType materialType, int width, int height, int colorCount, int pointSpacing) {
@@ -29,8 +29,8 @@ public final class TemplateConfiguration {
 		if (colorCount < 2 || colorCount > 32) {
 			throw new IllegalArgumentException("colorCount must be in [2, 32]");
 		}
-		if (pointSpacing <= 0) {
-			throw new IllegalArgumentException("pointSpacing must be > 0");
+        if (pointSpacing < 0) {
+            throw new IllegalArgumentException("pointSpacing must be >= 0");
 		}
 	}
 

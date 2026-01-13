@@ -5,11 +5,14 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 
 import javax.imageio.ImageIO;
 
-import artcreator.domain.port.MaterialType;
 import artcreator.domain.port.TemplateConfiguration;
+import artcreator.domain.port.TemplateResult;
 
 public class DomainImpl {
 
@@ -86,30 +89,11 @@ public class DomainImpl {
 		// 1) Scale image to raster resolution
 		BufferedImage scaled = scale(src, cfg.getWidth(), cfg.getHeight());
 
-		// 2) Convert pixels to grayscale + 3) Quantize to cfg.colorCount levels
-		int w = scaled.getWidth();
-		int h = scaled.getHeight();
-		int levels = cfg.getColorCount();
-		int[][] idx = new int[h][w];
-		int[] levelToGray = new int[levels];
-		for (int i = 0; i < levels; i++) {
-			levelToGray[i] = (int) Math.round(i * (255.0 / (levels - 1)));
-		}
-
-		for (int y = 0; y < h; y++) {
-			for (int x = 0; x < w; x++) {
-				int rgb = scaled.getRGB(x, y);
-				int r = (rgb >> 16) & 0xFF;
-				int g = (rgb >> 8) & 0xFF;
-				int b = (rgb) & 0xFF;
-				int gray = (int) Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
-				int bucket = (int) Math.round(gray * (levels - 1) / 255.0);
-				bucket = Math.max(0, Math.min(levels - 1, bucket));
-				idx[y][x] = bucket;
-			}
-		}
-
-		return renderPixelPreview(cfg, idx, levelToGray);
+		// 2) Reduce color palette to cfg.colorCount main colors, then assign each point
+		// to its nearest palette color.
+		QuantizedRaster qr = quantizeToPalette(scaled, cfg.getColorCount());
+		BufferedImage preview = renderToothpickPreview(cfg, qr);
+		return new TemplateResult(preview, qr.palette);
 	}
 
 	private BufferedImage scale(BufferedImage src, int targetW, int targetH) {
@@ -123,15 +107,192 @@ public class DomainImpl {
 		return out;
 	}
 
-	private BufferedImage renderPixelPreview(TemplateConfiguration cfg, int[][] idx, int[] levelToGray) {
-		int rasterH = idx.length;
-		int rasterW = idx[0].length;
+	private static final class QuantizedRaster {
+		private final int width;
+		private final int height;
+		private final int[] assignment; // length = width*height, palette index per cell
+		private final Color[] palette;
 
-		// Raster cell size (preview). For "Bügelperlen" spacing is fixed.
-		int cell = cfg.getMaterialType() == MaterialType.BUEGELPERLEN ? 16 : Math.max(4, cfg.getPointSpacing());
+		private QuantizedRaster(int width, int height, int[] assignment, Color[] palette) {
+			this.width = width;
+			this.height = height;
+			this.assignment = assignment;
+			this.palette = palette;
+		}
+	}
+
+	private QuantizedRaster quantizeToPalette(BufferedImage scaled, int requestedColors) {
+		int w = scaled.getWidth();
+		int h = scaled.getHeight();
+		int pixelCount = w * h;
+		int[] rgb = new int[pixelCount];
+		scaled.getRGB(0, 0, w, h, rgb, 0, w);
+
+		int k = Math.max(2, Math.min(32, requestedColors));
+		k = Math.min(k, pixelCount);
+
+		// Sample pixels to keep k-means fast for larger rasters.
+		int maxSamples = 10_000;
+		int sampleCount = Math.min(pixelCount, maxSamples);
+		int[] samples = new int[sampleCount];
+		if (sampleCount == pixelCount) {
+			System.arraycopy(rgb, 0, samples, 0, sampleCount);
+		} else {
+			Random rnd = new Random(1337);
+			for (int i = 0; i < sampleCount; i++) {
+				samples[i] = rgb[rnd.nextInt(pixelCount)];
+			}
+		}
+
+		int[] centers = kmeansPlusPlus(samples, k);
+		centers = kmeans(samples, centers, 15);
+
+		Color[] palette = new Color[centers.length];
+		for (int i = 0; i < centers.length; i++) {
+			palette[i] = new Color((centers[i] >> 16) & 0xFF, (centers[i] >> 8) & 0xFF, centers[i] & 0xFF);
+		}
+
+		int[] assignment = new int[pixelCount];
+		for (int i = 0; i < pixelCount; i++) {
+			assignment[i] = nearestCenterIndex(rgb[i], centers);
+		}
+
+		return new QuantizedRaster(w, h, assignment, palette);
+	}
+
+	private int[] kmeansPlusPlus(int[] samples, int k) {
+		Random rnd = new Random(1337);
+		List<Integer> centers = new ArrayList<>();
+		centers.add(samples[rnd.nextInt(samples.length)]);
+
+		double[] dist2 = new double[samples.length];
+		for (int c = 1; c < k; c++) {
+			int[] currentCenters = toIntArray(centers);
+			double sum = 0.0;
+			for (int i = 0; i < samples.length; i++) {
+				int rgb = samples[i];
+				int nearest = nearestCenterIndex(rgb, currentCenters);
+				int centerRgb = currentCenters[nearest];
+				double d = colorDist2(rgb, centerRgb);
+				dist2[i] = d;
+				sum += d;
+			}
+			if (sum <= 0.0) {
+				centers.add(samples[rnd.nextInt(samples.length)]);
+				continue;
+			}
+			double r = rnd.nextDouble() * sum;
+			double acc = 0.0;
+			int chosen = samples[rnd.nextInt(samples.length)];
+			for (int i = 0; i < samples.length; i++) {
+				acc += dist2[i];
+				if (acc >= r) {
+					chosen = samples[i];
+					break;
+				}
+			}
+			centers.add(chosen);
+		}
+		return toIntArray(centers);
+	}
+
+	private int[] kmeans(int[] samples, int[] centers, int maxIters) {
+		int k = centers.length;
+		int[] assignments = new int[samples.length];
+		for (int iter = 0; iter < maxIters; iter++) {
+			long[] sumR = new long[k];
+			long[] sumG = new long[k];
+			long[] sumB = new long[k];
+			int[] count = new int[k];
+
+			boolean changed = false;
+			for (int i = 0; i < samples.length; i++) {
+				int rgb = samples[i];
+				int idx = nearestCenterIndex(rgb, centers);
+				if (assignments[i] != idx) {
+					assignments[i] = idx;
+					changed = true;
+				}
+				int r = (rgb >> 16) & 0xFF;
+				int g = (rgb >> 8) & 0xFF;
+				int b = rgb & 0xFF;
+				sumR[idx] += r;
+				sumG[idx] += g;
+				sumB[idx] += b;
+				count[idx]++;
+			}
+
+			for (int c = 0; c < k; c++) {
+				if (count[c] == 0) {
+					continue;
+				}
+				int r = (int) Math.round(sumR[c] / (double) count[c]);
+				int g = (int) Math.round(sumG[c] / (double) count[c]);
+				int b = (int) Math.round(sumB[c] / (double) count[c]);
+				centers[c] = ((clamp255(r) << 16) | (clamp255(g) << 8) | clamp255(b));
+			}
+
+			if (!changed && iter > 0) {
+				break;
+			}
+		}
+		return centers;
+	}
+
+	private int nearestCenterIndex(int rgb, int[] centers) {
+		int best = 0;
+		double bestD = Double.POSITIVE_INFINITY;
+		for (int i = 0; i < centers.length; i++) {
+			double d = colorDist2(rgb, centers[i]);
+			if (d < bestD) {
+				bestD = d;
+				best = i;
+			}
+		}
+		return best;
+	}
+
+	private double colorDist2(int a, int b) {
+		int ar = (a >> 16) & 0xFF;
+		int ag = (a >> 8) & 0xFF;
+		int ab = a & 0xFF;
+		int br = (b >> 16) & 0xFF;
+		int bg = (b >> 8) & 0xFF;
+		int bb = b & 0xFF;
+		int dr = ar - br;
+		int dg = ag - bg;
+		int db = ab - bb;
+		return (double) dr * dr + (double) dg * dg + (double) db * db;
+	}
+
+	private int clamp255(int v) {
+		return Math.max(0, Math.min(255, v));
+	}
+
+	private int[] toIntArray(List<Integer> list) {
+		int[] out = new int[list.size()];
+		for (int i = 0; i < list.size(); i++) {
+			out[i] = list.get(i);
+		}
+		return out;
+	}
+
+	private BufferedImage renderToothpickPreview(TemplateConfiguration cfg, QuantizedRaster qr) {
+		int rasterW = qr.width;
+		int rasterH = qr.height;
+
+		// MVP toggle: keep grid/raster drawing code, but don't show it for now.
+		final boolean showRasterLines = false;
+
+		// Preview rendering for Toothpicks: keep a square raster cell, and show the
+		// toothpick position as a colored circle in the center. pointSpacing controls
+		// the gap BETWEEN cells.
+		int cellSize = 12;
+		int gap = Math.max(0, cfg.getPointSpacing());
+		int step = cellSize + gap;
 		int padding = 8;
-		int outW = padding + (rasterW * cell) + padding;
-		int outH = padding + (rasterH * cell) + padding;
+		int outW = padding + (rasterW * cellSize) + Math.max(0, (rasterW - 1) * gap) + padding;
+		int outH = padding + (rasterH * cellSize) + Math.max(0, (rasterH - 1) * gap) + padding;
 
 		BufferedImage out = new BufferedImage(outW, outH, BufferedImage.TYPE_INT_RGB);
 		Graphics2D g2 = out.createGraphics();
@@ -141,14 +302,30 @@ public class DomainImpl {
 		// Draw pixel raster (no numbers, no legend)
 		for (int y = 0; y < rasterH; y++) {
 			for (int x = 0; x < rasterW; x++) {
-				int bucket = idx[y][x];
-				int gray = levelToGray[bucket];
-				int px = padding + x * cell;
-				int py = padding + y * cell;
-				g2.setColor(new Color(gray, gray, gray));
-				g2.fillRect(px, py, cell, cell);
-				g2.setColor(Color.LIGHT_GRAY);
-				g2.drawRect(px, py, cell, cell);
+				int paletteIndex = qr.assignment[y * rasterW + x];
+				Color color = qr.palette[Math.max(0, Math.min(qr.palette.length - 1, paletteIndex))];
+				int px = padding + x * step;
+				int py = padding + y * step;
+				// Keep the raster squares uncolored; the toothpick marker carries the color.
+				g2.setColor(Color.WHITE);
+				g2.fillRect(px, py, cellSize, cellSize);
+				if (showRasterLines) {
+					g2.setColor(Color.LIGHT_GRAY);
+					g2.drawRect(px, py, cellSize, cellSize);
+				}
+
+				// Toothpick placement marker: centered colored circle with contrasting outline.
+				// Make the marker take up most of the cell.
+				int markerDiameter = Math.max(4, (int) Math.round(cellSize * 0.90));
+				int cx = px + (cellSize / 2);
+				int cy = py + (cellSize / 2);
+				int mx = cx - (markerDiameter / 2);
+				int my = cy - (markerDiameter / 2);
+				g2.setColor(color);
+				g2.fillOval(mx, my, markerDiameter, markerDiameter);
+				// Use a consistent outline so all circles look the same size.
+				g2.setColor(Color.BLACK);
+				g2.drawOval(mx, my, markerDiameter, markerDiameter);
 			}
 		}
 
